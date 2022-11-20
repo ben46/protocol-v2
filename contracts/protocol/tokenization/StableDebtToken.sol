@@ -10,7 +10,10 @@ import {IAaveIncentivesController} from '../../interfaces/IAaveIncentivesControl
 import {Errors} from '../libraries/helpers/Errors.sol';
 
 /**
- * @title StableDebtToken 稳定债务
+ * @title StableDebtToken 
+ 稳定债务,意思就是借出来之后
+ 利率都是按照当时借的时候的利率计算,
+ 而之后别人借的利率和你的借的肯定不一样
  * @notice Implements a stable debt token to track the borrowing positions of users
  * at stable rate mode
  * @author Aave
@@ -20,9 +23,19 @@ contract StableDebtToken is IStableDebtToken, DebtTokenBase {
 
   uint256 public constant DEBT_TOKEN_REVISION = 0x1;
 
+  //市场平均利率 = (当前市场平均利率 * 市场稳定债务总额 + rate * 用户新增债务) / (市场稳定债务总额+用户新增债务)
+  //每次mint/burn的时候更新
   uint256 internal _avgStableRate;
+
+  //用户mint/burn的时候会更新这个时间(也就是还钱和借钱的时间)
+  //也是可以用来计算用户的债务利息
   mapping(address => uint40) internal _timestamps;
-  mapping(address => uint256) internal _usersStableRate;
+
+  //stable rate = (stable debt * stable rate + stable borrow * stable rate) / (stable debt + stable borrow)
+  //稳定利率 = (原来的利息+新的利息) / (原来债务+新的债务)
+  //用户借钱的时候, 记录下来, 还清债务的时候, 这个值会归零
+  mapping(address => uint256) internal _usersStableRate; 
+
   uint40 internal _totalSupplyTimestamp;
 
   ILendingPool internal _pool;
@@ -64,40 +77,7 @@ contract StableDebtToken is IStableDebtToken, DebtTokenBase {
       debtTokenSymbol,
       params
     );
-  }
-
-  /**
-   * @dev Gets the revision of the stable debt token implementation
-   * @return The debt token implementation revision
-   **/
-  function getRevision() internal pure virtual override returns (uint256) {
-    return DEBT_TOKEN_REVISION;
-  }
-
-  /**
-   * @dev Returns the average stable rate across all the stable rate debt
-   * @return the average stable rate
-   **/
-  function getAverageStableRate() external view virtual override returns (uint256) {
-    return _avgStableRate;
-  }
-
-  /**
-   * @dev Returns the timestamp of the last user action
-   * @return The last update timestamp
-   **/
-  function getUserLastUpdated(address user) external view virtual override returns (uint40) {
-    return _timestamps[user];
-  }
-
-  /**
-   * @dev Returns the stable rate of the user
-   * @param user The address of the user
-   * @return The stable rate of user
-   **/
-  function getUserStableRate(address user) external view virtual override returns (uint256) {
-    return _usersStableRate[user];
-  }
+  } 
 
   /**
    * @dev Calculates the current user debt balance
@@ -154,6 +134,7 @@ contract StableDebtToken is IStableDebtToken, DebtTokenBase {
 
     vars.amountInRay = amount.wadToRay();
 
+    // user stable rate = (user stable rate * stable debt + new debt * rate) / (stable debt + new debt)
     vars.newStableRate = _usersStableRate[onBehalfOf]
       .rayMul(currentBalance.wadToRay())
       .add(vars.amountInRay.rayMul(rate))
@@ -165,13 +146,17 @@ contract StableDebtToken is IStableDebtToken, DebtTokenBase {
     //solium-disable-next-line
     _totalSupplyTimestamp = _timestamps[onBehalfOf] = uint40(block.timestamp);
 
-    // Calculates the updated average stable rate
+    //Calculates the updated average stable rate
+    //avg stable rate = (current avg stable rate * stable debt + rate * amount) / next supply
+    //市场平均利率 = (当前市场平均利率 * 市场稳定债务总额 + rate * 用户新增债务) / (市场稳定债务总额+用户新增债务)
     vars.currentAvgStableRate = _avgStableRate = vars
       .currentAvgStableRate
       .rayMul(vars.previousSupply.wadToRay())
       .add(rate.rayMul(vars.amountInRay))
       .rayDiv(vars.nextSupply.wadToRay());
 
+    // 这里不但要mint新增的债务,也要mint原来债务的利息
+    // amount就是要借款的数量 = stable debt token amount
     _mint(onBehalfOf, amount.add(balanceIncrease), vars.previousSupply);
 
     emit Transfer(address(0), onBehalfOf, amount);
@@ -278,12 +263,13 @@ contract StableDebtToken is IStableDebtToken, DebtTokenBase {
     }
 
     // Calculation of the accrued interest since the last accumulation
+    //新增的利息 = 现在用户的余额 - 原来用户的余额
     uint256 balanceIncrease = balanceOf(user).sub(previousPrincipalBalance);
 
     return (
-      previousPrincipalBalance,
-      previousPrincipalBalance.add(balanceIncrease),
-      balanceIncrease
+      previousPrincipalBalance, // 原来用户的余额
+      previousPrincipalBalance.add(balanceIncrease), // 现在用户的余额
+      balanceIncrease // 新增的利息
     );
   }
 
@@ -385,13 +371,10 @@ contract StableDebtToken is IStableDebtToken, DebtTokenBase {
    **/
   function _calcTotalSupply(uint256 avgRate) internal view virtual returns (uint256) {
     uint256 principalSupply = super.totalSupply();
+    if (principalSupply == 0) {      return 0;    }
 
-    if (principalSupply == 0) {
-      return 0;
-    }
-
-    uint256 cumulatedInterest =
-      MathUtils.calculateCompoundedInterest(avgRate, _totalSupplyTimestamp);
+    uint256 cumulatedInterest = MathUtils.calculateCompoundedInterest(avgRate, _totalSupplyTimestamp);
+    //汇率 = (1 + 当前市场平均利率 * 距离上次的时间 + ...)
 
     return principalSupply.rayMul(cumulatedInterest);
   }
@@ -432,5 +415,38 @@ contract StableDebtToken is IStableDebtToken, DebtTokenBase {
     if (address(_incentivesController) != address(0)) {
       _incentivesController.handleAction(account, oldTotalSupply, oldAccountBalance);
     }
+  }
+
+    /**
+   * @dev Gets the revision of the stable debt token implementation
+   * @return The debt token implementation revision
+   **/
+  function getRevision() internal pure virtual override returns (uint256) {
+    return DEBT_TOKEN_REVISION;
+  }
+  
+  /**
+   * @dev Returns the average stable rate across all the stable rate debt
+   * @return the average stable rate
+   **/
+  function getAverageStableRate() external view virtual override returns (uint256) {
+    return _avgStableRate;
+  }
+
+  /**
+   * @dev Returns the timestamp of the last user action
+   * @return The last update timestamp
+   **/
+  function getUserLastUpdated(address user) external view virtual override returns (uint40) {
+    return _timestamps[user];
+  }
+
+  /**
+   * @dev Returns the stable rate of the user
+   * @param user The address of the user
+   * @return The stable rate of user
+   **/
+  function getUserStableRate(address user) external view virtual override returns (uint256) {
+    return _usersStableRate[user];
   }
 }

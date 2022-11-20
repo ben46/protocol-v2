@@ -14,6 +14,7 @@ library MathUtils {
   /**
    * @dev Function to calculate the interest accumulated using a linear interest rate formula
    这里是计算线性利息
+   return = 1 + rate * timeElapse
    * @param rate The interest rate, in ray
    * @param lastUpdateTimestamp The timestamp of the last update of the interest
    * @return The interest rate linearly accumulated during the timeDelta, in ray

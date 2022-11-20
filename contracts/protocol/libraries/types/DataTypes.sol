@@ -21,8 +21,10 @@ library DataTypes {
 
     //the current variable borrow rate. Expressed in ray
     uint128 currentVariableBorrowRate;
+
     //the current stable borrow rate. Expressed in ray
     uint128 currentStableBorrowRate;
+    
     uint40 lastUpdateTimestamp;
     //tokens addresses
     address aTokenAddress;
