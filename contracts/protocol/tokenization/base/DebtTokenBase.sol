@@ -10,7 +10,7 @@ import {IncentivizedERC20} from '../IncentivizedERC20.sol';
 import {Errors} from '../../libraries/helpers/Errors.sol';
 
 /**
- * @title DebtTokenBase
+ * @title DebtTokenBase(分为两种,稳定债务,可变债务)
  * @notice Base contract for different types of debt tokens, like StableDebtToken or VariableDebtToken
  * @author Aave
  */
@@ -20,6 +20,7 @@ abstract contract DebtTokenBase is
   VersionedInitializable,
   ICreditDelegationToken
 {
+  //debt = stalbe debt + varialbe debt
   mapping(address => mapping(address => uint256)) internal _borrowAllowances;
 
   /**
@@ -61,9 +62,10 @@ abstract contract DebtTokenBase is
    * @dev Being non transferrable, the debt token does not implement any of the
    * standard ERC20 functions for transfer and allowance.
    **/
-  function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
-    recipient;
-    amount;
+  function transfer(address , uint256 ) public virtual override returns (bool) {
+    // recipient;
+    // amount;
+    //债务不允许转移
     revert('TRANSFER_NOT_SUPPORTED');
   }
 

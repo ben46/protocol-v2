@@ -12,15 +12,16 @@ import {IncentivizedERC20} from './IncentivizedERC20.sol';
 import {IAaveIncentivesController} from '../../interfaces/IAaveIncentivesController.sol';
 
 /**
- * @title Aave ERC20 AToken
+ * @title Aave ERC20 AToken(分为两种,分别为可变利率token和固定利率token)
+ 这里主要是作为interface,lendingpool主要负责逻辑
  * @dev Implementation of the interest bearing token for the Aave protocol
  * @author Aave
  */
-contract AToken is
+contract AToken is 
   VersionedInitializable,
   IncentivizedERC20('ATOKEN_IMPL', 'ATOKEN_IMPL', 0),
   IAToken
-{
+{// 数量是不断变化的
   using WadRayMath for uint256;
   using SafeERC20 for IERC20;
 
@@ -123,6 +124,8 @@ contract AToken is
     uint256 amount,
     uint256 index
   ) external override onlyLendingPool {
+    // 取钱
+    // scaled balance = amount / liquidity index
     uint256 amountScaled = amount.rayDiv(index);
     require(amountScaled != 0, Errors.CT_INVALID_BURN_AMOUNT);
     _burn(user, amountScaled);
@@ -148,9 +151,18 @@ contract AToken is
   ) external override onlyLendingPool returns (bool) {
     uint256 previousBalance = super.balanceOf(user);
 
-    uint256 amountScaled = amount.rayDiv(index);
+    //这里相当于做了一次汇率的转换
+    uint256 amountScaled = amount.rayDiv(index); // scaled balance = amount / normalized income 或者是 liquidity index
+
     require(amountScaled != 0, Errors.CT_INVALID_MINT_AMOUNT);
-    _mint(user, amountScaled);
+
+    // scaled balance并不是你真实的balance, 而是用于记账的
+    //当你获取balanceof的时候, 他又会根据你记账的金额把汇率换算回去
+    //这样做的好处是,我的atoken数量根据时间是一直变多的
+    //但是我不可能一直用gas去更新
+    //所以每次我查询的时候只用汇率算一遍就行了
+    _mint(user, amountScaled); 
+    
 
     emit Transfer(address(0), user, amount);
     emit Mint(user, amount, index);
@@ -210,8 +222,15 @@ contract AToken is
     view
     override(IncentivizedERC20, IERC20)
     returns (uint256)
-  {
-    return super.balanceOf(user).rayMul(_pool.getReserveNormalizedIncome(_underlyingAsset));
+  {        
+    //Normalized income = liquidityIndex * deltaT * liquidate rate
+    //Normalized income *= deltaT * liquidate rate
+    // aToken Blance = scaled balance * Normalized income
+    // 这里返回你存入的时候余额 + 你应该得到的利息
+    //normalized income = NI 计算方法和LI(liquidity index)一样
+    //相当于这里做了一次汇率的计算,把你存入的钱,根据时间,算出汇率,然后返回    
+    //为什么这里返回的单利
+    return (super.balanceOf(user) * _pool.getReserveNormalizedIncome(_underlyingAsset) + 1e27/2) / 1e27;
   }
 
   /**

@@ -95,6 +95,7 @@ library ReserveLogic {
       return reserve.variableBorrowIndex;
     }
 
+    //为什么这里债务的计算是复利?
     uint256 cumulated =
       MathUtils.calculateCompoundedInterest(reserve.currentVariableBorrowRate, timestamp).rayMul(
         reserve.variableBorrowIndex

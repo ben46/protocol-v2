@@ -9,12 +9,16 @@ import {ILendingPool} from '../../interfaces/ILendingPool.sol';
 import {IAaveIncentivesController} from '../../interfaces/IAaveIncentivesController.sol';
 
 /**
- * @title VariableDebtToken
+ * @title VariableDebtToken 可变债务
  * @notice Implements a variable debt token to track the borrowing positions of users
  * at variable rate mode
  * @author Aave
  **/
 contract VariableDebtToken is DebtTokenBase, IVariableDebtToken {
+  //variable borrow rate index = (1 + Varialbe rate  ) * variable index
+
+  //(1 + x) ^ y = 1 + xy +...
+  //泰勒展开
   using WadRayMath for uint256;
 
   uint256 public constant DEBT_TOKEN_REVISION = 0x1;
@@ -78,7 +82,7 @@ contract VariableDebtToken is DebtTokenBase, IVariableDebtToken {
     if (scaledBalance == 0) {
       return 0;
     }
-
+    //这里返回的也是复利,为啥债务是复利
     return scaledBalance.rayMul(_pool.getReserveNormalizedVariableDebt(_underlyingAsset));
   }
 
@@ -98,11 +102,18 @@ contract VariableDebtToken is DebtTokenBase, IVariableDebtToken {
     uint256 amount,
     uint256 index
   ) external override onlyLendingPool returns (bool) {
+    // leding pool borrow的时候调用本函数(也只有lendingpool可以调用)
+
     if (user != onBehalfOf) {
       _decreaseBorrowAllowance(onBehalfOf, user, amount);
     }
 
     uint256 previousBalance = super.balanceOf(onBehalfOf);
+    // 和atoken一样, 先给你按照汇率(index)换算一边
+    // uint256 cumulatedVariableBorrowInterest = 
+    //         MathUtils.calculateCompoundedInterest(reserve.currentVariableBorrowRate, timestamp);这里用了泰勒级数展开(展开到第三极)
+    //variableBorrowIndex *= cumulatedVariableBorrowInterest
+    //amountScaled = amount * variableBorrowIndex
     uint256 amountScaled = amount.rayDiv(index);
     require(amountScaled != 0, Errors.CT_INVALID_MINT_AMOUNT);
 

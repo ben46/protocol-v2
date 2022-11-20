@@ -662,6 +662,8 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
     override
     returns (uint256)
   {
+    // liquidityIndex += rate * timeDifference / SECONDS_PER_YEAR * liquidityIndex + 0.5
+    //return liquidityIndex
     return _reserves[asset].getNormalizedIncome();
   }
 

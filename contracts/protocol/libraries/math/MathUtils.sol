@@ -13,11 +13,11 @@ library MathUtils {
 
   /**
    * @dev Function to calculate the interest accumulated using a linear interest rate formula
+   这里是计算线性利息
    * @param rate The interest rate, in ray
    * @param lastUpdateTimestamp The timestamp of the last update of the interest
    * @return The interest rate linearly accumulated during the timeDelta, in ray
    **/
-
   function calculateLinearInterest(uint256 rate, uint40 lastUpdateTimestamp)
     internal
     view
@@ -25,14 +25,14 @@ library MathUtils {
   {
     //solium-disable-next-line
     uint256 timeDifference = block.timestamp.sub(uint256(lastUpdateTimestamp));
-
     return (rate.mul(timeDifference) / SECONDS_PER_YEAR).add(WadRayMath.ray());
   }
 
   /**
    * @dev Function to calculate the interest using a compounded interest rate formula
+   这里是计算复利
    * To avoid expensive exponentiation, the calculation is performed using a binomial approximation:
-   *
+   *  泰勒展开式
    *  (1+x)^n = 1+n*x+[n/2*(n-1)]*x^2+[n/6*(n-1)*(n-2)*x^3...
    *
    * The approximation slightly underpays liquidity providers and undercharges borrowers, with the advantage of great gas cost reductions
@@ -49,6 +49,7 @@ library MathUtils {
   ) internal pure returns (uint256) {
     //solium-disable-next-line
     uint256 exp = currentTimestamp.sub(uint256(lastUpdateTimestamp));
+    //exp = currentTimestamp - lastUpdateTimestamp
 
     if (exp == 0) {
       return WadRayMath.ray();
@@ -64,9 +65,10 @@ library MathUtils {
     uint256 basePowerThree = basePowerTwo.rayMul(ratePerSecond);
 
     uint256 secondTerm = exp.mul(expMinusOne).mul(basePowerTwo) / 2;
-    uint256 thirdTerm = exp.mul(expMinusOne).mul(expMinusTwo).mul(basePowerThree) / 6;
+    uint256 thirdTerm = exp.mul(expMinusOne).mul(expMinusTwo).mul(basePowerThree) / 6; // 展开到x的3次方
 
-    return WadRayMath.ray().add(ratePerSecond.mul(exp)).add(secondTerm).add(thirdTerm);
+    uint256 linearInterest = WadRayMath.ray().add(ratePerSecond.mul(exp));
+    return linearInterest.add(secondTerm).add(thirdTerm);
   }
 
   /**

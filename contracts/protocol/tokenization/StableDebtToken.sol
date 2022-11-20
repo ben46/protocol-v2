@@ -10,7 +10,7 @@ import {IAaveIncentivesController} from '../../interfaces/IAaveIncentivesControl
 import {Errors} from '../libraries/helpers/Errors.sol';
 
 /**
- * @title StableDebtToken
+ * @title StableDebtToken 稳定债务
  * @notice Implements a stable debt token to track the borrowing positions of users
  * at stable rate mode
  * @author Aave
@@ -109,6 +109,7 @@ contract StableDebtToken is IStableDebtToken, DebtTokenBase {
     if (accountBalance == 0) {
       return 0;
     }
+    //为什么债务返回的是复利
     uint256 cumulatedInterest =
       MathUtils.calculateCompoundedInterest(stableRate, _timestamps[account]);
     return accountBalance.rayMul(cumulatedInterest);

@@ -4,14 +4,21 @@ pragma solidity 0.6.12;
 library DataTypes {
   // refer to the whitepaper, section 1.1 basic concepts for a formal description of these properties.
   struct ReserveData {
+
     //stores the reserve configuration
     ReserveConfigurationMap configuration;
-    //the liquidity index. Expressed in ray
-    uint128 liquidityIndex;
+
+    //cummulated liquidity index. Expressed in ray
+    //累计流动性指数(类似compound的汇率)
+    //存款之后会有存款利率,存款利率用这个累计流动性指数的方式来记录
+    uint128 liquidityIndex;// LI = (LR * deltaT + 1) * LI   note:LI0 = 1 ray    LR = liquidity rate
+
     //variable borrow index. Expressed in ray
     uint128 variableBorrowIndex;
+
     //the current supply rate. Expressed in ray
-    uint128 currentLiquidityRate;
+    uint128 currentLiquidityRate;//当前资产的流动性率(存款利率) = 资金利用率 * 贷款利率
+
     //the current variable borrow rate. Expressed in ray
     uint128 currentVariableBorrowRate;
     //the current stable borrow rate. Expressed in ray
