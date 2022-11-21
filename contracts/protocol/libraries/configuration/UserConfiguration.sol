@@ -5,16 +5,18 @@ import {Errors} from '../helpers/Errors.sol';
 import {DataTypes} from '../types/DataTypes.sol';
 
 /**
- * @title UserConfiguration library
+ * @title 以 uint256 数值上的不同位的数值来表示用户不同的配置，该配置仅限内部使用，用户无法外部更改。
+ * 主要是用户对于资产的设置，对于所有特定资产，都有两位数来表示，是否有抵押，是否有借贷。
  * @author Aave
  * @notice Implements the bitmap logic to handle the user configuration
  */
 library UserConfiguration {
+  // 每个资产第二位是1，第一位是0，即都是 01 的形式
   uint256 internal constant BORROWING_MASK =
     0x5555555555555555555555555555555555555555555555555555555555555555;
 
   /**
-   * @dev Sets if the user is borrowing the reserve identified by reserveIndex
+   * @dev 设置用户在某特定上资产有无借贷
    * @param self The configuration object
    * @param reserveIndex The index of the reserve in the bitmap
    * @param borrowing True if the user is borrowing the reserve, false otherwise
@@ -31,7 +33,7 @@ library UserConfiguration {
   }
 
   /**
-   * @dev Sets if the user is using as collateral the reserve identified by reserveIndex
+   * @dev 设置用户在某特定上资产有无抵押
    * @param self The configuration object
    * @param reserveIndex The index of the reserve in the bitmap
    * @param usingAsCollateral True if the user is usin the reserve as collateral, false otherwise
@@ -92,7 +94,7 @@ library UserConfiguration {
   }
 
   /**
-   * @dev Used to validate if a user has been borrowing from any reserve
+   * @dev 用户是否有借贷过任何一个资产。
    * @param self The configuration object
    * @return True if the user has been borrowing any reserve, false otherwise
    **/

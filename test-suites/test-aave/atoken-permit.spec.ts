@@ -82,7 +82,7 @@ makeSuite('AToken: Permit', (testEnv: TestEnv) => {
     );
   });
 
-  it('Submits a permit with maximum expiration length', async () => {
+  it('提交一次永久期限的许可', async () => {
     const { aDai, deployer, users } = testEnv;
     const owner = deployer;
     const spender = users[1];
@@ -124,7 +124,7 @@ makeSuite('AToken: Permit', (testEnv: TestEnv) => {
     expect((await aDai._nonces(owner.address)).toNumber()).to.be.equal(1);
   });
 
-  it('Cancels the previous permit', async () => {
+  it('取消上一次许可', async () => {
     const { aDai, deployer, users } = testEnv;
     const owner = deployer;
     const spender = users[1];

@@ -5,7 +5,7 @@ import {Errors} from '../helpers/Errors.sol';
 import {DataTypes} from '../types/DataTypes.sol';
 
 /**
- * @title ReserveConfiguration library
+ * @title 以 uint256 数值上的不同位的数值来表示资产不同的配置。
  * @author Aave
  * @notice Implements the bitmap logic to handle the reserve configuration
  */

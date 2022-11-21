@@ -1,4 +1,8 @@
-import { APPROVAL_AMOUNT_LENDING_POOL, MAX_UINT_AMOUNT, ZERO_ADDRESS } from '../../helpers/constants';
+import {
+  APPROVAL_AMOUNT_LENDING_POOL,
+  MAX_UINT_AMOUNT,
+  ZERO_ADDRESS,
+} from '../../helpers/constants';
 import { convertToCurrencyDecimals } from '../../helpers/contracts-helpers';
 import { expect } from 'chai';
 import { ethers } from 'ethers';
@@ -25,10 +29,12 @@ makeSuite('AToken: Transfer', (testEnv: TestEnv) => {
     //user 1 deposits 1000 DAI
     const amountDAItoDeposit = await convertToCurrencyDecimals(dai.address, '1000');
 
+    // 用户0往池子里存入1000 dai，得到1000个adai
     await pool
       .connect(users[0].signer)
       .deposit(dai.address, amountDAItoDeposit, users[0].address, '0');
 
+    // 用户0把1000个aDAI转账给用户1
     await aDai.connect(users[0].signer).transfer(users[1].address, amountDAItoDeposit);
 
     const name = await aDai.name();
@@ -45,7 +51,7 @@ makeSuite('AToken: Transfer', (testEnv: TestEnv) => {
     );
   });
 
-  it('User 0 deposits 1 WETH and user 1 tries to borrow the WETH with the received DAI as collateral', async () => {
+  it('用户 0 存入 1 WETH ， 用户 1 尝试 to 借 the WETH 用 the 接受到的 DAI as 抵押', async () => {
     const { users, pool, weth, helpersContract } = testEnv;
     const userAddress = await pool.signer.getAddress();
 
@@ -53,9 +59,12 @@ makeSuite('AToken: Transfer', (testEnv: TestEnv) => {
 
     await weth.connect(users[0].signer).approve(pool.address, APPROVAL_AMOUNT_LENDING_POOL);
 
+    //用户0网池子里存入1 weth， 得到1 aWETH
     await pool
       .connect(users[0].signer)
       .deposit(weth.address, ethers.utils.parseEther('1.0'), userAddress, '0');
+
+    //用户1 用自己的aDAI作为抵押 从WETH池子里借 0.1 个， 利率模式是稳定， AaveReferral不知道啥意思
     await pool
       .connect(users[1].signer)
       .borrow(
@@ -66,19 +75,22 @@ makeSuite('AToken: Transfer', (testEnv: TestEnv) => {
         users[1].address
       );
 
+    //获取用户储备数据
     const userReserveData = await helpersContract.getUserReserveData(
       weth.address,
       users[1].address
     );
 
+    //用户的储备数据应该有稳定利率贷款0.1个
     expect(userReserveData.currentStableDebt.toString()).to.be.eq(ethers.utils.parseEther('0.1'));
   });
 
-  it('User 1 tries to transfer all the DAI used as collateral back to user 0 (revert expected)', async () => {
+  it('用户 1 尝试转让所有已经被作为 抵押物 的DAI 回给 to 用户 0 (revert expected)', async () => {
     const { users, pool, aDai, dai, weth } = testEnv;
 
     const aDAItoTransfer = await convertToCurrencyDecimals(dai.address, '1000');
 
+    // aDAI是不允许转账的
     await expect(
       aDai.connect(users[1].signer).transfer(users[0].address, aDAItoTransfer),
       VL_TRANSFER_NOT_ALLOWED

@@ -107,24 +107,35 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
     address onBehalfOf,
     uint16 referralCode
   ) external override whenNotPaused {
+    // 根据抵押资产的地址获取资产的相关数据
     DataTypes.ReserveData storage reserve = _reserves[asset];
 
+    // 验证抵押数量是否符合要求：
+    // 抵押数量不能为0，资产必须是激活状态，且没有处于冻结状态
     ValidationLogic.validateDeposit(reserve, amount);
 
+    // 获取抵押资产对应的 aToken 地址
     address aToken = reserve.aTokenAddress;
 
+    // 更新资产的状态变量
     reserve.updateState();
+    // 更新资产的利率模型变量
     reserve.updateInterestRates(asset, aToken, amount, 0);
 
+    // 把你的资产传给协议
     IERC20(asset).safeTransferFrom(msg.sender, aToken, amount);
 
+    // 将 aToken mint给 onBehalfOf 地址（一般是 msg.sender）
+    // isFirstDeposit 代表该资产是否是用户第一次存入或之前抵押余额为0
     bool isFirstDeposit = IAToken(aToken).mint(onBehalfOf, amount, reserve.liquidityIndex);
 
+    // 若第一次被存入，默认将用户 onBehalfOf 的配置中相应资产转为可抵押类型
     if (isFirstDeposit) {
       _usersConfig[onBehalfOf].setUsingAsCollateral(reserve.id, true);
       emit ReserveUsedAsCollateralEnabled(asset, onBehalfOf);
     }
 
+    // 广播事件
     emit Deposit(asset, msg.sender, onBehalfOf, amount, referralCode);
   }
 
@@ -144,18 +155,20 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
     uint256 amount,
     address to
   ) external override whenNotPaused returns (uint256) {
-    DataTypes.ReserveData storage reserve = _reserves[asset];
+    DataTypes.ReserveData storage reserve = _reserves[asset]; // 获取reserve数据
 
-    address aToken = reserve.aTokenAddress;
+    address aToken = reserve.aTokenAddress; // 获取aToken地址
 
-    uint256 userBalance = IAToken(aToken).balanceOf(msg.sender);
+    uint256 userBalance = IAToken(aToken).balanceOf(msg.sender); // 查询aToken数量，本息总额
 
     uint256 amountToWithdraw = amount;
 
+    // 如果是 uin256 最大值，赎回用户所有余额
     if (amount == type(uint256).max) {
       amountToWithdraw = userBalance;
     }
 
+    // 验证参数合法性
     ValidationLogic.validateWithdraw(
       asset,
       amountToWithdraw,
@@ -167,15 +180,19 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
       _addressesProvider.getPriceOracle()
     );
 
+    // 更新资产的状态变量
     reserve.updateState();
 
+    // 更新资产的利率模型变量
     reserve.updateInterestRates(asset, aToken, 0, amountToWithdraw);
 
+    // 如果用户赎回了全部余额，则设置用户的该资产不再是抵押品
     if (amountToWithdraw == userBalance) {
       _usersConfig[msg.sender].setUsingAsCollateral(reserve.id, false);
       emit ReserveUsedAsCollateralDisabled(asset, msg.sender);
     }
 
+    // aToken.burn()
     IAToken(aToken).burn(msg.sender, to, amountToWithdraw, reserve.liquidityIndex);
 
     emit Withdraw(asset, msg.sender, to, amountToWithdraw);
@@ -199,14 +216,16 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
    * if he has been given credit delegation allowance
    **/
   function borrow(
-    address asset,
-    uint256 amount,
-    uint256 interestRateMode,
-    uint16 referralCode,
-    address onBehalfOf
+    address asset, // 借贷资产地址
+    uint256 amount, // 借贷数量
+    uint256 interestRateMode, // 利率模式 1 固定 2 浮动
+    uint16 referralCode, // 推介码，一般为0
+    address onBehalfOf // 债务承担者地址
   ) external override whenNotPaused {
+    // 从storage中读取借贷资产信息
     DataTypes.ReserveData storage reserve = _reserves[asset];
 
+    // 调用借贷内部方法
     _executeBorrow(
       ExecuteBorrowParams(
         asset,
@@ -241,8 +260,10 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
   ) external override whenNotPaused returns (uint256) {
     DataTypes.ReserveData storage reserve = _reserves[asset];
 
+    // 获取偿还人的债务数量，分别调用 stableDectToken 和 variableDebtToken 的 balanceOf 方法
     (uint256 stableDebt, uint256 variableDebt) = Helpers.getUserCurrentDebt(onBehalfOf, reserve);
 
+    // 获取偿债的类型 固定还是浮动
     DataTypes.InterestRateMode interestRateMode = DataTypes.InterestRateMode(rateMode);
 
     ValidationLogic.validateRepay(
@@ -254,15 +275,20 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
       variableDebt
     );
 
+    // 根据偿债类型赋值待还款数量
     uint256 paybackAmount =
       interestRateMode == DataTypes.InterestRateMode.STABLE ? stableDebt : variableDebt;
 
+    // 偿债数量 < 待还款数量 调整待还款数量
     if (amount < paybackAmount) {
       paybackAmount = amount;
     }
 
+    // 更新资产状态信息 主要更新利率指数相关变量
     reserve.updateState();
 
+    // 根据不同类型还款，调用debtToken.burn()
+    // 浮动类型债务需要资产的variableBorrowIndex
     if (interestRateMode == DataTypes.InterestRateMode.STABLE) {
       IStableDebtToken(reserve.stableDebtTokenAddress).burn(onBehalfOf, paybackAmount);
     } else {
@@ -297,8 +323,10 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
   function swapBorrowRateMode(address asset, uint256 rateMode) external override whenNotPaused {
     DataTypes.ReserveData storage reserve = _reserves[asset];
 
+    // 获取偿还人的债务数量，分别调用 stableDectToken 和 variableDebtToken 的 balanceOf 方法
     (uint256 stableDebt, uint256 variableDebt) = Helpers.getUserCurrentDebt(msg.sender, reserve);
 
+    // 获取偿债的类型 固定还是浮动
     DataTypes.InterestRateMode interestRateMode = DataTypes.InterestRateMode(rateMode);
 
     ValidationLogic.validateSwapRateMode(
@@ -309,8 +337,10 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
       interestRateMode
     );
 
+    // 更新资产状态信息 主要更新利率指数相关变量
     reserve.updateState();
 
+    // 切换借贷类型，将原类型debtToken burn掉，然后mint出新类型的 debtToken
     if (interestRateMode == DataTypes.InterestRateMode.STABLE) {
       IStableDebtToken(reserve.stableDebtTokenAddress).burn(msg.sender, stableDebt);
       IVariableDebtToken(reserve.variableDebtTokenAddress).mint(
@@ -402,6 +432,7 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
       _addressesProvider.getPriceOracle()
     );
 
+    // 将用户设置的bitmap相应的位修改数值 （0 或 1）
     _usersConfig[msg.sender].setUsingAsCollateral(reserve.id, useAsCollateral);
 
     if (useAsCollateral) {
@@ -429,8 +460,10 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
     uint256 debtToCover,
     bool receiveAToken
   ) external override whenNotPaused {
+    // 获取抵押管理合约地址
     address collateralManager = _addressesProvider.getLendingPoolCollateralManager();
 
+    // 调用抵押管理合约进行清算，返回处理结果
     //solium-disable-next-line
     (bool success, bytes memory result) =
       collateralManager.delegatecall(
@@ -444,10 +477,13 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
         )
       );
 
+    // 断言执行成功
     require(success, Errors.LP_LIQUIDATION_CALL_FAILED);
 
+    // 解析执行返回码
     (uint256 returnCode, string memory returnMessage) = abi.decode(result, (uint256, string));
 
+    // 当返回码不为0，revert返回信息
     require(returnCode == 0, string(abi.encodePacked(returnMessage)));
   }
 
@@ -713,7 +749,7 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
   }
 
   /**
-   * @dev Returns the fee on flash loans 
+   * @dev Returns the fee on flash loans
    */
   function FLASHLOAN_PREMIUM_TOTAL() public view returns (uint256) {
     return _flashLoanPremiumTotal;
@@ -853,16 +889,21 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
   }
 
   function _executeBorrow(ExecuteBorrowParams memory vars) internal {
+    // 从storage中读取借贷资产信息
     DataTypes.ReserveData storage reserve = _reserves[vars.asset];
+    // 从storage中读取用户设置信息
     DataTypes.UserConfigurationMap storage userConfig = _usersConfig[vars.onBehalfOf];
 
+    // 获取预言机价格提供合约的地址
     address oracle = _addressesProvider.getPriceOracle();
 
+    // 将借贷资产数量换算成等价的ETH数量
     uint256 amountInETH =
       IPriceOracleGetter(oracle).getAssetPrice(vars.asset).mul(vars.amount).div(
         10**reserve.configuration.getDecimals()
       );
 
+    // 检验入参是否合法
     ValidationLogic.validateBorrow(
       vars.asset,
       reserve,
@@ -878,14 +919,22 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
       oracle
     );
 
+    // 更新资产状态
     reserve.updateState();
 
+    // 初始化固定利率
     uint256 currentStableRate = 0;
 
+    // 代表是否是该用户在此资产上的第一笔借贷
     bool isFirstBorrowing = false;
+    // 使用固定利率的借贷
     if (DataTypes.InterestRateMode(vars.interestRateMode) == DataTypes.InterestRateMode.STABLE) {
+      // 读取当前的固定利率
       currentStableRate = reserve.currentStableBorrowRate;
 
+      // 调用固定利率债务token的mint方法
+      //  1. 将debtToken转给 msg.sender
+      //  2. 返回该笔借贷前，用户借贷额是否为0，即判断该笔借贷是否为用户的第一笔
       isFirstBorrowing = IStableDebtToken(reserve.stableDebtTokenAddress).mint(
         vars.user,
         vars.onBehalfOf,
@@ -893,6 +942,7 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
         currentStableRate
       );
     } else {
+      // 使用浮动利率的借贷
       isFirstBorrowing = IVariableDebtToken(reserve.variableDebtTokenAddress).mint(
         vars.user,
         vars.onBehalfOf,
@@ -901,17 +951,22 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
       );
     }
 
+    // 如果是该用户的第一笔借贷，自动将该资产设为用户的借贷资产类
     if (isFirstBorrowing) {
       userConfig.setBorrowing(reserve.id, true);
     }
 
+    // 跟新资产的利率（固定 和 浮动）
+    // 根据是否释放了借贷资产来判断liquidityTaken的数量
     reserve.updateInterestRates(
       vars.asset,
       vars.aTokenAddress,
-      0,
-      vars.releaseUnderlying ? vars.amount : 0
+      0, // liquidityAdded
+      vars.releaseUnderlying ? vars.amount : 0 // liquidityTaken
     );
 
+    // 如果releaseUnderlying为true 将借贷资产转给借贷受益人
+    // 在合约中只在LendingPool.borrow() 方法中找到该入参，其值固定为true
     if (vars.releaseUnderlying) {
       IAToken(vars.aTokenAddress).transferUnderlyingTo(vars.user, vars.amount);
     }
