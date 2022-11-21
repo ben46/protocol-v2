@@ -71,11 +71,11 @@ contract LendingPoolCollateralManager is
    * @dev Function to liquidate a position if its Health Factor drops below 1
    * - The caller (liquidator) covers `debtToCover` amount of debt of the user getting liquidated, and receives
    *   a proportionally amount of the `collateralAsset` plus a bonus to cover market risk
-   * @param collateralAsset The address of the underlying asset used as collateral, to receive as result of the liquidation
-   * @param debtAsset The address of the underlying borrowed asset to be repaid with the liquidation
-   * @param user The address of the borrower getting liquidated
-   * @param debtToCover The debt amount of borrowed `asset` the liquidator wants to cover
-   * @param receiveAToken `true` if the liquidators wants to receive the collateral aTokens, `false` if he wants
+   * @param collateralAsset 指定清算的哪个作为抵押物的资产
+   * @param debtAsset 借出来的资产的token地址
+   * @param user 被清算人
+   * @param debtToCover 清算多少数量(最多50%)
+   * @param receiveAToken 是否接受atoken
    * to receive the underlying collateral asset directly
    **/
   function liquidationCall(
@@ -102,6 +102,7 @@ contract LendingPoolCollateralManager is
 
     (vars.userStableDebt, vars.userVariableDebt) = Helpers.getUserCurrentDebt(user, debtReserve);
 
+    //如果健康度不满足清算,这里会报错
     (vars.errorCode, vars.errorMsg) = ValidationLogic.validateLiquidationCall(
       collateralReserve,
       debtReserve,
@@ -123,6 +124,7 @@ contract LendingPoolCollateralManager is
       LIQUIDATION_CLOSE_FACTOR_PERCENT
     );
 
+    //清算不能超过抵押物的50%
     vars.actualDebtToLiquidate = debtToCover > vars.maxLiquidatableDebt
       ? vars.maxLiquidatableDebt
       : debtToCover;
@@ -163,13 +165,14 @@ contract LendingPoolCollateralManager is
     debtReserve.updateState();
 
     if (vars.userVariableDebt >= vars.actualDebtToLiquidate) {
+      //只清算浮动债务
       IVariableDebtToken(debtReserve.variableDebtTokenAddress).burn(
         user,
         vars.actualDebtToLiquidate,
         debtReserve.variableBorrowIndex
       );
     } else {
-      // If the user doesn't have variable debt, no need to try to burn variable debt tokens
+      //先清算浮动利率债务
       if (vars.userVariableDebt > 0) {
         IVariableDebtToken(debtReserve.variableDebtTokenAddress).burn(
           user,
@@ -177,6 +180,7 @@ contract LendingPoolCollateralManager is
           debtReserve.variableBorrowIndex
         );
       }
+      //再清算固定利率债务
       IStableDebtToken(debtReserve.stableDebtTokenAddress).burn(
         user,
         vars.actualDebtToLiquidate.sub(vars.userVariableDebt)
@@ -191,6 +195,7 @@ contract LendingPoolCollateralManager is
     );
 
     if (receiveAToken) {
+      //清算人接受atoken
       vars.liquidatorPreviousATokenBalance = IERC20(vars.collateralAtoken).balanceOf(msg.sender);
       vars.collateralAtoken.transferOnLiquidation(user, msg.sender, vars.maxCollateralToLiquidate);
 
@@ -200,6 +205,7 @@ contract LendingPoolCollateralManager is
         emit ReserveUsedAsCollateralEnabled(collateralAsset, msg.sender);
       }
     } else {
+      //清算人接受原始token
       collateralReserve.updateState();
       collateralReserve.updateInterestRates(
         collateralAsset,
@@ -300,6 +306,7 @@ contract LendingPoolCollateralManager is
       .percentMul(vars.liquidationBonus)
       .div(vars.collateralPrice.mul(10**vars.debtAssetDecimals));
 
+    //用户抵押物 < 最大被清算
     if (vars.maxAmountCollateralToLiquidate > userCollateralBalance) {
       collateralAmount = userCollateralBalance;
       debtAmountNeeded = vars
@@ -307,10 +314,10 @@ contract LendingPoolCollateralManager is
         .mul(collateralAmount)
         .mul(10**vars.debtAssetDecimals)
         .div(vars.debtAssetPrice.mul(10**vars.collateralDecimals))
-        .percentDiv(vars.liquidationBonus);
+        .percentDiv(vars.liquidationBonus); //最多能还多少债 = 抵押物价格 * 抵押物数量 / 债务资产价格 / 105%
     } else {
-      collateralAmount = vars.maxAmountCollateralToLiquidate;
-      debtAmountNeeded = debtToCover;
+      collateralAmount = vars.maxAmountCollateralToLiquidate; //不能超出最大被清算
+      debtAmountNeeded = debtToCover; //要还多少债
     }
     return (collateralAmount, debtAmountNeeded);
   }

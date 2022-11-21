@@ -406,6 +406,7 @@ library ValidationLogic {
       );
     }
 
+    //如果用户健康度是好的,报错
     if (userHealthFactor >= GenericLogic.HEALTH_FACTOR_LIQUIDATION_THRESHOLD) {
       return (
         uint256(Errors.CollateralManagerErrors.HEALTH_FACTOR_ABOVE_THRESHOLD),
@@ -418,6 +419,7 @@ library ValidationLogic {
         userConfig.isUsingAsCollateral(collateralReserve.id);
 
     //if collateral isn't enabled as collateral by user, it cannot be liquidated
+    //如果被清算资产没有被抵押,报错
     if (!isCollateralEnabled) {
       return (
         uint256(Errors.CollateralManagerErrors.COLLATERAL_CANNOT_BE_LIQUIDATED),
@@ -425,6 +427,7 @@ library ValidationLogic {
       );
     }
 
+    //用户没有任何债务,报错
     if (userStableDebt == 0 && userVariableDebt == 0) {
       return (
         uint256(Errors.CollateralManagerErrors.CURRRENCY_NOT_BORROWED),

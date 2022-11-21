@@ -443,9 +443,9 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
   }
 
   /**
-   * @dev Function to liquidate a non-healthy position collateral-wise, with Health Factor below 1
-   * - The caller (liquidator) covers `debtToCover` amount of debt of the user getting liquidated, and receives
-   *   a proportionally amount of the `collateralAsset` plus a bonus to cover market risk
+   * @dev 在健康因素低于1的情况下，清算非健康头寸的功能
+          呼叫者（清算人）支付被清算用户债务的“debtToCover”金额，
+          并按比例获得“抵押资产”金额加上支付市场风险的奖金
    * @param collateralAsset The address of the underlying asset used as collateral, to receive as result of the liquidation
    * @param debtAsset The address of the underlying borrowed asset to be repaid with the liquidation
    * @param user The address of the borrower getting liquidated
@@ -538,11 +538,11 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
       aTokenAddresses[vars.i] = _reserves[assets[vars.i]].aTokenAddress;
 
       premiums[vars.i] = amounts[vars.i].mul(_flashLoanPremiumTotal).div(10000);
-
+      //1. 直接给用户转账
       IAToken(aTokenAddresses[vars.i]).transferUnderlyingTo(receiverAddress, amounts[vars.i]);
     }
 
-    require(
+    require( //用户callback
       vars.receiver.executeOperation(assets, amounts, premiums, msg.sender, params),
       Errors.LP_INVALID_FLASH_LOAN_EXECUTOR_RETURN
     );
@@ -555,6 +555,8 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
       vars.currentAmountPlusPremium = vars.currentAmount.add(vars.currentPremium);
 
       if (DataTypes.InterestRateMode(modes[vars.i]) == DataTypes.InterestRateMode.NONE) {
+        //v1用快照,v2这个版本不用快照,因此也取消了重入检查,也没办法aave自己调用aave
+        //采用pull方式,pull只需要用户对aave授权
         _reserves[vars.currentAsset].updateState();
         _reserves[vars.currentAsset].cumulateToLiquidityIndex(
           IERC20(vars.currentATokenAddress).totalSupply(),
@@ -567,6 +569,7 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
           0
         );
 
+        //把钱转回来
         IERC20(vars.currentAsset).safeTransferFrom(
           receiverAddress,
           vars.currentATokenAddress,
@@ -698,6 +701,8 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
     override
     returns (uint256)
   {
+    // liquidityIndex += rate * timeDifference / SECONDS_PER_YEAR * liquidityIndex + 0.5
+    //return liquidityIndex
     return _reserves[asset].getNormalizedIncome();
   }
 
@@ -920,7 +925,7 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
     );
 
     // 更新资产状态
-    reserve.updateState();
+    reserve.updateState(); // 这里也会重新计算variable borrow index
 
     // 初始化固定利率
     uint256 currentStableRate = 0;
@@ -961,9 +966,9 @@ contract LendingPool is VersionedInitializable, ILendingPool, LendingPoolStorage
     reserve.updateInterestRates(
       vars.asset,
       vars.aTokenAddress,
-      0, // liquidityAdded
-      vars.releaseUnderlying ? vars.amount : 0 // liquidityTaken
-    );
+      0,
+      vars.releaseUnderlying ? vars.amount : 0
+    ); //这里会计算variableBorrowIndex, currentStableBorrowRate等等
 
     // 如果releaseUnderlying为true 将借贷资产转给借贷受益人
     // 在合约中只在LendingPool.borrow() 方法中找到该入参，其值固定为true

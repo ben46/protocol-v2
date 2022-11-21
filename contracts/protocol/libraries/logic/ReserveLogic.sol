@@ -95,6 +95,8 @@ library ReserveLogic {
       return reserve.variableBorrowIndex;
     }
 
+    //为什么这里债务的计算是复利?
+    //当前浮动借款指数 *= (1 + 当前浮动借款利率 * 时间 + ...)
     uint256 cumulated =
       MathUtils.calculateCompoundedInterest(reserve.currentVariableBorrowRate, timestamp).rayMul(
         reserve.variableBorrowIndex
@@ -108,12 +110,15 @@ library ReserveLogic {
    * @param reserve the reserve object
    **/
   function updateState(DataTypes.ReserveData storage reserve) internal {
+    //获取浮动债务的scaled数量, 缩放到t0时刻的总数量
     uint256 scaledVariableDebt =
       IVariableDebtToken(reserve.variableDebtTokenAddress).scaledTotalSupply();
+    //缓存更新之前的值
     uint256 previousVariableBorrowIndex = reserve.variableBorrowIndex;
     uint256 previousLiquidityIndex = reserve.liquidityIndex;
     uint40 lastUpdatedTimestamp = reserve.lastUpdateTimestamp;
 
+    //更新index变量
     (uint256 newLiquidityIndex, uint256 newVariableBorrowIndex) =
       _updateIndexes(
         reserve,
@@ -123,6 +128,7 @@ library ReserveLogic {
         lastUpdatedTimestamp
       );
 
+    // 如果有新的资产, 会转入一部分到金库
     _mintToTreasury(
       reserve,
       scaledVariableDebt,
@@ -343,7 +349,7 @@ library ReserveLogic {
     uint256 newLiquidityIndex = liquidityIndex;
     uint256 newVariableBorrowIndex = variableBorrowIndex;
 
-    //only cumulating if there is any income being produced
+    //如果池子中没有人借贷,那么不产生收益,下面的计算也就没有意义
     if (currentLiquidityRate > 0) {
       uint256 cumulatedLiquidityInterest =
         MathUtils.calculateLinearInterest(currentLiquidityRate, timestamp);
