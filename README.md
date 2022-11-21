@@ -1,17 +1,60 @@
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Build pass](https://github.com/AAVE/protocol-v2/actions/workflows/node.js.yml/badge.svg)](https://github.com/aave/protocol-v2/actions/workflows/node.js.yml)
-```
-        .///.                .///.     //.            .//  `/////////////-
-       `++:++`              .++:++`    :++`          `++:  `++:......---.`
-      `/+: -+/`            `++- :+/`    /+/         `/+/   `++.
-      /+/   :+/            /+:   /+/    `/+/        /+/`   `++.
-  -::/++::`  /+:       -::/++::` `/+:    `++:      :++`    `++/:::::::::.
-  -:+++::-`  `/+:      --++/---`  `++-    .++-    -++.     `++/:::::::::.
-   -++.       .++-      -++`       .++.    .++.  .++-      `++.
-  .++-         -++.    .++.         -++.    -++``++-       `++.
- `++:           :++`  .++-           :++`    :+//+:        `++:----------`
- -/:             :/-  -/:             :/.     ://:         `/////////////-
-```
+## stable debt token
+
+### avg stable rate
+市场平均利率 = (当前市场平均利率 * 市场稳定债务总额 + rate * 用户新增债务) / (市场稳定债务总额+用户新增债务)
+
+### usersStableRate
+稳定利率 = (原来的利息+新的利息) / (原来债务+新的债务)
+用户借钱的时候, 记录下来, 还清债务的时候, 这个值会归零
+
+### cumulatedInterest(在计算balanceOf,totalSupply)
+用来复原真实债务(x=user stable rate, n=time)
+
+(1+x)^n = 1+n*x+[n/2*(n-1)]*x^2+[n/6*(n-1)*(n-2)*x^3
+
+## var debt token
+### scaled balance
+aave用来记账的数字,等于还原到最开始的时候,应该给你多少token
+
+
+### normalized variable debt(这个数字可以用来计算balanceOf,totalSupply)
+x = current var borrow rate, n=time
+
+(1+x)^n = 1 + n*x + [n/2*(n-1)]*x^2 + [n/6*(n-1)*(n-2)*x^3
+
+### var borrow index(用来mint/burn的时候计算scaled balance)
+
+x = current var borrow rate, n = time
+
+cumulated var borrow interest = 1 + n*x + [n/2*(n-1)]*x^2 + [n/6*(n-1)*(n-2)*x^3
+
+上面的值和nor var debt计算方法一样
+
+var borrow index *= cumulated var borrow interest 
+
+### current var borrow rate(在reserve interest rate strategy中计算)
+
+=base var borrow rate(初始化的时候给死的) + u(资金利用率) *var rate slope / 常量
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Aave Protocol v2
 
