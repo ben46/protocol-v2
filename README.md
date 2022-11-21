@@ -1,28 +1,43 @@
-## stable debt token
+# 1. stable debt token
 
-### avg stable rate
-市场平均利率 = (当前市场平均利率 * 市场稳定债务总额 + rate * 用户新增债务) / (市场稳定债务总额+用户新增债务)
+## 市场avg stable rate(burn,mint的时候被更新, mint,burn,totalSupply被调用)
+市场avg stable rate = (市场avg stable rate * 市场稳定债务总额 + 市场current Stable Rate * 用户新增债务) / (市场稳定债务总额+用户新增债务)
 
-### usersStableRate
-稳定利率 = (原来的利息+新的利息) / (原来债务+新的债务)
-用户借钱的时候, 记录下来, 还清债务的时候, 这个值会归零
 
-### cumulatedInterest(在计算balanceOf,totalSupply)
+## cumulated Interest(在计算balanceOf,totalSupply)
 用来复原真实债务(x=user stable rate, n=time)
 
 (1+x)^n = 1+n*x+[n/2*(n-1)]*x^2+[n/6*(n-1)*(n-2)*x^3
 
-## var debt token
-### scaled balance
+## users Stable Rate (mint/burn的时候更新,计算balanceOf,burn被调用)
+稳定利率 = (原来的利息+新的利息) / (原来债务+新的债务)
+用户借钱的时候, 记录下来, 还清债务的时候, 这个值会归零
+user stable rate = (user stable rate * current balance + amount * 市场current Stable Rate) / (current balance + amount)
+
+## current balance(也就是t0时刻的balance值)
+scaled balance
+
+## 市场current Stable Rate(在reserve interest rate strategy中计算)
+
+currentStableRate += u(资金利用率) *stable rate slope / 常量
+
+
+
+
+
+
+
+# 2. var debt token
+## scaled balance
 aave用来记账的数字,等于还原到最开始的时候,应该给你多少token
 
 
-### normalized variable debt(这个数字可以用来计算balanceOf,totalSupply)
+## normalized variable debt(这个数字可以用来计算balanceOf,totalSupply)
 x = current var borrow rate, n=time
 
 (1+x)^n = 1 + n*x + [n/2*(n-1)]*x^2 + [n/6*(n-1)*(n-2)*x^3
 
-### var borrow index(用来mint/burn的时候计算scaled balance)
+## var borrow index(用来mint/burn的时候计算scaled balance)
 
 x = current var borrow rate, n = time
 
@@ -32,20 +47,30 @@ cumulated var borrow interest = 1 + n*x + [n/2*(n-1)]*x^2 + [n/6*(n-1)*(n-2)*x^3
 
 var borrow index *= cumulated var borrow interest 
 
-### current var borrow rate(在reserve interest rate strategy中计算)
+## current var borrow rate(在reserve interest rate strategy中计算)
 
 =base var borrow rate(初始化的时候给死的) + u(资金利用率) *var rate slope / 常量
 
 
+# 3. atoken
+## scaled balance
+aave用来记账的数字,等于还原到最开始的时候,应该给你多少token
 
+## normalized income(这个数字可以用来计算balanceOf,totalSupply)
+normalized income = cumulated Liquidity Interest * liquidity index
 
+## liquidity index(计算方法和上面一模一样)
 
+## cumulated Liquidity Interest
+x = current liquidity rate, n=time
 
+y = (1+x)^n = 1 + n*x
 
+## current liquidity rate(在reserve interest rate strategy中计算)也就是存款利率
+=overall borrow rate * u(资金利用率) * (1-金库预留部分)
 
-
-
-
+## overall borrow rate(在reserve interest rate strategy中计算)也就是加权借贷利率
+overall borrow rate = (var debt * var rate + stable deb * stable rate) / total debt
 
 
 
